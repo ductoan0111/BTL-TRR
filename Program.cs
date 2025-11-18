@@ -1,39 +1,34 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace EulerHierholzer
+namespace DijkstraShortestPath
 {
     class Program
     {
+        private const long INF = (long)1e18;
+
         static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
-            Console.WriteLine("=== THUAT TOAN HIERHOLZER - CHU TRINH EULER TRONG DO THI VO HUONG ===");
+            Console.WriteLine("=== THUAT TOAN DIJKSTRA - DUONG DI NGAN NHAT TU 1 DINH NGUON ===");
 
+            // Nhập số đỉnh và số cạnh
             Console.Write("Nhập số đỉnh n: ");
             int n = int.Parse(Console.ReadLine() ?? "0");
 
             Console.Write("Nhập số cạnh m: ");
             int m = int.Parse(Console.ReadLine() ?? "0");
 
-            if (m == 0)
-            {
-                Console.WriteLine("Đồ thị không có cạnh nên không xét chu trình Euler.");
-                Console.WriteLine("Nhấn Enter để kết thúc...");
-                Console.ReadLine();
-                return;
-            }
-
-            var adj = new List<int>[n + 1];
+            // Khởi tạo danh sách kề
+            var graph = new List<(int to, int w)>[n + 1];
             for (int i = 1; i <= n; i++)
             {
-                adj[i] = new List<int>();
+                graph[i] = new List<(int to, int w)>();
             }
 
-            int[] degree = new int[n + 1];
-
-            Console.WriteLine("Nhập các cạnh dạng: u v (đồ thị vô hướng)");
-            Console.WriteLine("Ví dụ: 1 2 nghĩa là cạnh nối giữa đỉnh 1 và 2.\n");
+            Console.WriteLine("Nhập các cạnh dạng: u v w (u, v là đỉnh; w là trọng số không âm)");
+            Console.WriteLine("Ví dụ: 1 2 5 nghĩa là cạnh (1,2) có trọng số 5.");
+            Console.WriteLine("Giả sử đồ thị vô hướng.\n");
 
             for (int i = 0; i < m; i++)
             {
@@ -46,151 +41,121 @@ namespace EulerHierholzer
                 }
 
                 string[] parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2)
+                if (parts.Length < 3)
                 {
-                    Console.WriteLine("Bạn phải nhập đủ 2 số: u v. Nhập lại.");
+                    Console.WriteLine("Bạn phải nhập đủ 3 số: u v w. Nhập lại.");
                     i--;
                     continue;
                 }
 
                 int u = int.Parse(parts[0]);
                 int v = int.Parse(parts[1]);
+                int w = int.Parse(parts[2]);
 
-                if (u < 1 || u > n || v < 1 || v > n)
+                if (u < 1 || u > n || v < 1 || v > n || w < 0)
                 {
-                    Console.WriteLine("Đỉnh không hợp lệ (ngoài 1..n). Nhập lại.");
+                    Console.WriteLine("Dữ liệu cạnh không hợp lệ (đỉnh ngoài 1..n hoặc trọng số âm). Nhập lại.");
                     i--;
                     continue;
                 }
 
-                adj[u].Add(v);
-                adj[v].Add(u);
-                degree[u]++;
-                degree[v]++;
+                // Đồ thị vô hướng
+                graph[u].Add((v, w));
+                graph[v].Add((u, w));
             }
 
-            // Kiểm tra điều kiện tồn tại chu trình Euler
-            if (!HasEulerianCycle(adj, degree, n, out int startVertex, out string reason))
+            Console.Write("\nNhập đỉnh nguồn s (1..n): ");
+            int s = int.Parse(Console.ReadLine() ?? "1");
+            if (s < 1 || s > n)
             {
-                Console.WriteLine($"\nKhông tồn tại chu trình Euler. Lý do: {reason}");
-                Console.WriteLine("Nhấn Enter để kết thúc...");
+                Console.WriteLine("Đỉnh nguồn không hợp lệ.");
+                Console.WriteLine("Nhấn Enter để thoát...");
                 Console.ReadLine();
                 return;
             }
 
-            // Tìm chu trình Euler bằng Hierholzer
-            var eulerCycle = Hierholzer(adj, startVertex);
+            // Chạy Dijkstra
+            Dijkstra(graph, n, s, out long[] dist, out int[] parent);
 
-            Console.WriteLine("\nChu trình Euler tìm được:");
-            Console.WriteLine(string.Join(" -> ", eulerCycle));
+            // In kết quả
+            Console.WriteLine($"\nKẾT QUẢ: Đường đi ngắn nhất từ đỉnh nguồn {s}");
+            Console.WriteLine("Đỉnh\tKhoảng cách\tĐường đi");
+
+            for (int v = 1; v <= n; v++)
+            {
+                if (dist[v] == INF)
+                {
+                    Console.WriteLine($"{v}\tKhông tới được\t-");
+                }
+                else
+                {
+                    var path = BuildPath(v, parent);
+                    Console.WriteLine($"{v}\t{dist[v]}\t\t{string.Join(" -> ", path)}");
+                }
+            }
 
             Console.WriteLine("\nNhấn Enter để kết thúc...");
             Console.ReadLine();
         }
 
         /// <summary>
-        /// Kiểm tra điều kiện tồn tại chu trình Euler trong đồ thị vô hướng
+        /// Thuật toán Dijkstra tìm đường đi ngắn nhất từ 1 đỉnh nguồn
         /// </summary>
-        static bool HasEulerianCycle(List<int>[] adj, int[] degree, int n,
-                                     out int startVertex, out string reason)
+        static void Dijkstra(List<(int to, int w)>[] graph, int n, int start,
+                             out long[] dist, out int[] parent)
         {
-            startVertex = -1;
-            reason = "";
-
-            // Tìm một đỉnh có bậc > 0 để bắt đầu DFS
-            for (int i = 1; i <= n; i++)
-            {
-                if (degree[i] > 0)
-                {
-                    startVertex = i;
-                    break;
-                }
-            }
-
-            if (startVertex == -1)
-            {
-                reason = "Tất cả các đỉnh đều có bậc 0 (đồ thị không có cạnh).";
-                return false;
-            }
-
-            // Kiểm tra liên thông (chỉ xét các đỉnh có bậc > 0)
+            dist = new long[n + 1];
+            parent = new int[n + 1];
             bool[] visited = new bool[n + 1];
-            DFS(adj, startVertex, visited);
 
             for (int i = 1; i <= n; i++)
             {
-                if (degree[i] > 0 && !visited[i])
-                {
-                    reason = "Đồ thị không liên thông (tồn tại thành phần có cạnh nhưng không nối với thành phần khác).";
-                    return false;
-                }
+                dist[i] = INF;
+                parent[i] = -1;
+                visited[i] = false;
             }
 
-            // Kiểm tra tất cả các đỉnh đều có bậc chẵn
-            for (int i = 1; i <= n; i++)
+            var pq = new PriorityQueue<int, long>();
+
+            dist[start] = 0;
+            pq.Enqueue(start, 0);
+
+            while (pq.Count > 0)
             {
-                if (degree[i] % 2 != 0)
+                pq.TryDequeue(out int u, out long du);
+
+                if (visited[u]) continue;
+                visited[u] = true;
+
+                foreach (var edge in graph[u])
                 {
-                    reason = $"Tồn tại đỉnh bậc lẻ (ví dụ đỉnh {i}), nên không có chu trình Euler.";
-                    return false;
+                    int v = edge.to;
+                    int w = edge.w;
+
+                    if (!visited[v] && dist[v] > dist[u] + w)
+                    {
+                        dist[v] = dist[u] + w;
+                        parent[v] = u;
+                        pq.Enqueue(v, dist[v]);
+                    }
                 }
             }
-
-            reason = "OK";
-            return true;
         }
 
         /// <summary>
-        /// DFS dùng để kiểm tra liên thông
+        /// Truy vết đường đi từ nguồn đến v thông qua mảng parent
         /// </summary>
-        static void DFS(List<int>[] adj, int u, bool[] visited)
+        static List<int> BuildPath(int v, int[] parent)
         {
-            visited[u] = true;
-            foreach (int v in adj[u])
+            var path = new List<int>();
+            int cur = v;
+            while (cur != -1)
             {
-                if (!visited[v])
-                    DFS(adj, v, visited);
+                path.Add(cur);
+                cur = parent[cur];
             }
-        }
-
-        /// <summary>
-        /// Thuật toán Hierholzer dùng stack tìm chu trình Euler
-        /// </summary>
-        static List<int> Hierholzer(List<int>[] adj, int start)
-        {
-            var stack = new Stack<int>();
-            var circuit = new List<int>();
-
-            stack.Push(start);
-
-            while (stack.Count > 0)
-            {
-                int u = stack.Peek();
-
-                if (adj[u].Count > 0)
-                {
-                    // Lấy một đỉnh kề v bất kỳ (ở cuối danh sách)
-                    int v = adj[u][adj[u].Count - 1];
-
-                    // Xóa cạnh (u, v) khỏi danh sách kề
-                    adj[u].RemoveAt(adj[u].Count - 1);
-                    // Đồng thời xóa u khỏi danh sách kề của v
-                    adj[v].Remove(u);
-
-                    // Đi tiếp sang v
-                    stack.Push(v);
-                }
-                else
-                {
-                    // u không còn cạnh chưa dùng
-                    stack.Pop();
-                    circuit.Add(u);
-                }
-            }
-
-            // circuit hiện theo thứ tự ngược, đảo lại để có chu trình đúng chiều
-            circuit.Reverse();
-            return circuit;
+            path.Reverse();
+            return path;
         }
     }
 }
